@@ -252,4 +252,30 @@ router.get("/requests/search", verifyAdmin, (req, res) => {
     });
 });
 
+// PUBLIC STATS (no login required for home page)
+router.get("/public-stats", (req, res) => {
+    const stats = {};
+
+    db.query("SELECT COUNT(*) as total FROM donor", (err, result) => {
+        if (err) return res.status(500).json({ message: "Error" });
+        stats.totalDonors = result[0].total;
+
+        db.query("SELECT COUNT(*) as total FROM donation_history", (err2, result2) => {
+            if (err2) return res.status(500).json({ message: "Error" });
+            stats.totalDonations = result2[0].total;
+
+            db.query("SELECT COUNT(*) as total FROM blood_request", (err3, result3) => {
+                if (err3) return res.status(500).json({ message: "Error" });
+                stats.totalRequests = result3[0].total;
+
+                db.query("SELECT COUNT(*) as total FROM blood_request WHERE request_status = 'Fulfilled'", (err4, result4) => {
+                    if (err4) return res.status(500).json({ message: "Error" });
+                    stats.fulfilledRequests = result4[0].total;
+                    res.json(stats);
+                });
+            });
+        });
+    });
+});
+
 module.exports = router;
