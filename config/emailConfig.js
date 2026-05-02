@@ -1,22 +1,32 @@
 require("dotenv").config();
-const nodemailer = require("nodemailer");
+const SibApiV3Sdk = require("@getbrevo/brevo");
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+apiInstance.setApiKey(
+  SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY,
+);
 
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("Email config error:", error);
-  } else {
-    console.log("Email server ready ✅");
+async function sendEmail(to, toName, subject, htmlContent) {
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.htmlContent = htmlContent;
+  sendSmtpEmail.sender = {
+    name: "UBBDMS Blood Bank",
+    email: process.env.BREVO_SENDER_EMAIL,
+  };
+  sendSmtpEmail.to = [{ email: to, name: toName }];
+
+  try {
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    return true;
+  } catch (error) {
+    console.error("Email send error:", error.message);
+    return false;
   }
-});
+}
 
-module.exports = transporter;
+console.log("Brevo Email API ready ✅");
+
+module.exports = { sendEmail };

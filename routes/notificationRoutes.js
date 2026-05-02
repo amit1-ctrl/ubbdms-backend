@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
 const jwt = require("jsonwebtoken");
-const transporter = require("../config/emailConfig");
+const { sendEmail } = require("../config/emailConfig");
 
 const SECRET = "ubbdms_secret_key";
 
@@ -48,88 +48,54 @@ router.post("/send-all", verifyAdmin, (req, res) => {
       console.log("Total donors found:", donors.length);
 
       if (donors.length === 0)
-        return res.json({ message: "No active donors found in database" });
+        return res.json({ message: "No active donors found" });
 
-      // Save notifications to DB
+      // Save to DB
       const values = donors.map((d) => [d.donor_id, title, message]);
       db.query(
         "INSERT INTO notifications (donor_id, title, message) VALUES ?",
         [values],
         async (err2) => {
-          if (err2) {
-            console.error("Notification save error:", err2);
-          }
+          if (err2) console.error("Notification save error:", err2);
 
-          // Send emails
           let emailsSent = 0;
           let emailsFailed = 0;
 
           for (const donor of donors) {
-            try {
-              console.log("Sending email to:", donor.email);
-              await transporter.sendMail({
-                from: `"UBBDMS Blood Bank" <${process.env.EMAIL_USER}>`,
-                to: donor.email,
-                subject: title,
-                html: `
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <style>
-                                    body { font-family: Arial, sans-serif; }
-                                    .header {
-                                        background: #c0392b;
-                                        color: white;
-                                        padding: 20px;
-                                        text-align: center;
-                                    }
-                                    .content {
-                                        padding: 30px;
-                                        background: #f9f9f9;
-                                    }
-                                    .footer {
-                                        background: #2c3e50;
-                                        color: white;
-                                        padding: 15px;
-                                        text-align: center;
-                                        font-size: 12px;
-                                    }
-                                    .btn {
-                                        background: #c0392b;
-                                        color: white;
-                                        padding: 12px 25px;
-                                        text-decoration: none;
-                                        border-radius: 5px;
-                                        display: inline-block;
-                                        margin-top: 15px;
-                                    }
-                                </style>
-                            </head>
-                            <body>
-                                <div class="header">
-                                    <h1>🩸 UBBDMS Blood Bank</h1>
-                                    <p>University of Information Technology & Sciences</p>
-                                </div>
-                                <div class="content">
-                                    <h2>Dear ${donor.name},</h2>
-                                    <p>${message}</p>
-                                    <a href="https://yourbloodbank.netlify.app/donor-dashboard.html" 
-                                        class="btn">
-                                        Visit Dashboard
-                                    </a>
-                                </div>
-                                <div class="footer">
-                                    <p>UITS Blood Bank & Donor Management System</p>
-                                    <p>This is an automated email. Please do not reply.</p>
-                                </div>
-                            </body>
-                            </html>`,
-              });
+            const html = `
+                        <!DOCTYPE html>
+                        <html>
+                        <body>
+                            <div style="background:#c0392b;color:white;padding:20px;text-align:center;">
+                                <h1>🩸 UBBDMS Blood Bank</h1>
+                                <p>University of Information Technology & Sciences</p>
+                            </div>
+                            <div style="padding:30px;background:#f9f9f9;">
+                                <h2>Dear ${donor.name},</h2>
+                                <p>${message}</p>
+                                <a href="https://yourbloodbank.netlify.app/donor-dashboard.html"
+                                    style="background:#c0392b;color:white;padding:12px 25px;
+                                    text-decoration:none;border-radius:5px;
+                                    display:inline-block;margin-top:15px;">
+                                    Visit Dashboard
+                                </a>
+                            </div>
+                            <div style="background:#2c3e50;color:white;padding:15px;
+                                text-align:center;font-size:12px;">
+                                <p>UITS Blood Bank & Donor Management System</p>
+                                <p>This is an automated email. Please do not reply.</p>
+                            </div>
+                        </body>
+                        </html>`;
+
+            const sent = await sendEmail(donor.email, donor.name, title, html);
+
+            if (sent) {
               emailsSent++;
               console.log("Email sent to:", donor.email);
-            } catch (emailErr) {
+            } else {
               emailsFailed++;
-              console.error("Email failed for:", donor.email, emailErr.message);
+              console.error("Email failed for:", donor.email);
             }
           }
 
@@ -150,17 +116,10 @@ router.post("/send-blood-group", verifyAdmin, (req, res) => {
     "SELECT donor_id, name, email FROM donor WHERE blood_group = ? AND availability_status = 1",
     [blood_group],
     async (err, donors) => {
-      if (err) {
-        console.error("DB Error:", err);
+      if (err)
         return res.status(500).json({ message: "Failed to fetch donors" });
-      }
 
-      console.log(
-        "Donors found for blood group",
-        blood_group,
-        ":",
-        donors.length,
-      );
+      console.log("Donors found:", donors.length);
 
       if (donors.length === 0)
         return res.json({
@@ -172,47 +131,50 @@ router.post("/send-blood-group", verifyAdmin, (req, res) => {
         "INSERT INTO notifications (donor_id, title, message) VALUES ?",
         [values],
         async (err2) => {
-          if (err2) console.error("Notification save error:", err2);
+          if (err2) console.error("Save error:", err2);
 
           let emailsSent = 0;
           let emailsFailed = 0;
 
           for (const donor of donors) {
-            try {
-              await transporter.sendMail({
-                from: `"UBBDMS Blood Bank" <${process.env.EMAIL_USER}>`,
-                to: donor.email,
-                subject: "🚨 Urgent: " + title,
-                html: `
-                                <!DOCTYPE html>
-                                <html>
-                                <body>
-                                    <div style="background:#c0392b;color:white;padding:20px;text-align:center;">
-                                        <h1>🩸 UBBDMS Blood Bank</h1>
-                                        <p>URGENT NOTIFICATION</p>
-                                    </div>
-                                    <div style="padding:30px;background:#f9f9f9;">
-                                        <h2>Dear ${donor.name},</h2>
-                                        <div style="background:#fff3cd;border:2px solid #f39c12;padding:15px;border-radius:5px;margin:15px 0;">
-                                            <strong>🚨 Urgent Request for ${blood_group} Blood Group</strong>
-                                        </div>
-                                        <p>${message}</p>
-                                        <a href="https://yourbloodbank.netlify.app/blood-request.html"
-                                            style="background:#c0392b;color:white;padding:12px 25px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:15px;">
-                                            View Blood Requests
-                                        </a>
-                                    </div>
-                                    <div style="background:#2c3e50;color:white;padding:15px;text-align:center;font-size:12px;">
-                                        <p>UITS Blood Bank & Donor Management System</p>
-                                    </div>
-                                </body>
-                                </html>`,
-              });
-              emailsSent++;
-            } catch (emailErr) {
-              emailsFailed++;
-              console.error("Email failed:", donor.email, emailErr.message);
-            }
+            const html = `
+                        <!DOCTYPE html>
+                        <html>
+                        <body>
+                            <div style="background:#c0392b;color:white;padding:20px;text-align:center;">
+                                <h1>🩸 UBBDMS Blood Bank</h1>
+                                <p>URGENT NOTIFICATION</p>
+                            </div>
+                            <div style="padding:30px;background:#f9f9f9;">
+                                <h2>Dear ${donor.name},</h2>
+                                <div style="background:#fff3cd;border:2px solid #f39c12;
+                                    padding:15px;border-radius:5px;margin:15px 0;">
+                                    <strong>🚨 Urgent Request for ${blood_group} Blood Group</strong>
+                                </div>
+                                <p>${message}</p>
+                                <a href="https://yourbloodbank.netlify.app/blood-request.html"
+                                    style="background:#c0392b;color:white;padding:12px 25px;
+                                    text-decoration:none;border-radius:5px;
+                                    display:inline-block;margin-top:15px;">
+                                    View Blood Requests
+                                </a>
+                            </div>
+                            <div style="background:#2c3e50;color:white;padding:15px;
+                                text-align:center;font-size:12px;">
+                                <p>UITS Blood Bank & Donor Management System</p>
+                            </div>
+                        </body>
+                        </html>`;
+
+            const sent = await sendEmail(
+              donor.email,
+              donor.name,
+              "🚨 Urgent: " + title,
+              html,
+            );
+
+            if (sent) emailsSent++;
+            else emailsFailed++;
           }
 
           res.json({
@@ -227,15 +189,10 @@ router.post("/send-blood-group", verifyAdmin, (req, res) => {
 // GET MY NOTIFICATIONS
 router.get("/my", verifyToken, (req, res) => {
   db.query(
-    `SELECT * FROM notifications 
-        WHERE donor_id = ? 
-        ORDER BY created_at DESC`,
+    "SELECT * FROM notifications WHERE donor_id = ? ORDER BY created_at DESC",
     [req.user.id],
     (err, results) => {
-      if (err)
-        return res
-          .status(500)
-          .json({ message: "Failed to fetch notifications" });
+      if (err) return res.status(500).json({ message: "Failed to fetch" });
       res.json(results);
     },
   );
@@ -247,8 +204,7 @@ router.put("/read/:id", verifyToken, (req, res) => {
     "UPDATE notifications SET is_read = TRUE WHERE notification_id = ?",
     [req.params.id],
     (err) => {
-      if (err)
-        return res.status(500).json({ message: "Failed to mark as read" });
+      if (err) return res.status(500).json({ message: "Failed" });
       res.json({ message: "Marked as read" });
     },
   );
