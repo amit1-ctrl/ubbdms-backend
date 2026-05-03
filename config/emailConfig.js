@@ -1,28 +1,31 @@
 require("dotenv").config();
-const SibApiV3Sdk = require("@getbrevo/brevo");
-
-const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-apiInstance.setApiKey(
-  SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
-  process.env.BREVO_API_KEY,
-);
+const axios = require("axios");
 
 async function sendEmail(to, toName, subject, htmlContent) {
-  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-
-  sendSmtpEmail.subject = subject;
-  sendSmtpEmail.htmlContent = htmlContent;
-  sendSmtpEmail.sender = {
-    name: "UBBDMS Blood Bank",
-    email: process.env.BREVO_SENDER_EMAIL,
-  };
-  sendSmtpEmail.to = [{ email: to, name: toName }];
-
   try {
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "UBBDMS Blood Bank",
+          email: process.env.BREVO_SENDER_EMAIL,
+        },
+        to: [{ email: to, name: toName }],
+        subject: subject,
+        htmlContent: htmlContent,
+      },
+      {
+        headers: {
+          accept: "application/json",
+          "api-key": process.env.BREVO_API_KEY,
+          "content-type": "application/json",
+        },
+      },
+    );
+    console.log("Email sent to:", to);
     return true;
   } catch (error) {
-    console.error("Email send error:", error.message);
+    console.error("Email error:", error.response?.data || error.message);
     return false;
   }
 }
